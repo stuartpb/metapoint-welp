@@ -13,7 +13,7 @@ function imdbTemplate(type,abbr) {
       'i'),
     hostname: 'www.imdb.com',
     path: function(match) {
-      return '/'+type+'/'+abbr+'0000000'.slice(match[1].length,7)+idnum
+      return '/'+type+'/'+abbr+'0000000'.slice(match[1].length,7)+match[1]
     }
   }
 }
@@ -29,6 +29,8 @@ var pages = []
 var eicontinue
 var curpage = 0
 var timerId
+//Whether we're waiting for the response to a request.
+var popWaiting = false
 
 /* Enter a suggestion through the Metapoint interface.
 
@@ -41,12 +43,12 @@ var timerId
   This way I can run the script from my own clients as well as
   the server, with what's built into Node, and the loss is, what-
   100ms of IO throughput at 4 requests a second? */
-function suggest(apiparams, cb) {
+function suggest(params, cb) {
   var req = http.request({
     host: mphost,
     path: url.format({
       pathname: '/api/v0/suggest',
-      query: apiparams
+      query: params
     }),
     headers: {
       'User-Agent': useragent
@@ -67,7 +69,7 @@ function wpApiQuery(params, cb) {
     host: wikihost,
     path: url.format({
       pathname: '/w/api.php',
-      query: apiparams
+      query: params
     }),
     headers: {
       'User-Agent': useragent
@@ -78,7 +80,7 @@ function wpApiQuery(params, cb) {
       bodylist.push(chunk)
     })
     res.on('end', function(){
-      cb(res.statusCode,JSON.parse(bodylist.join()))
+      cb(res.statusCode,JSON.parse(bodylist.join('')))
     })
   })
 
@@ -93,7 +95,11 @@ function wpApiQuery(params, cb) {
 function populatePagesArray(code, body) {
   //i should probably check if the code is 200 but
   pages = body.query.embeddedin
+  curpage = 0
+  //NOTE: I don't know if the last one has a query-continue
   eicontinue = body['query-continue'].embeddedin.eicontinue
+  popWaiting = false
+  process.stdout.write('\n')
 }
 
 //Searches the content of an "External links" section
@@ -109,7 +115,7 @@ function searchElContent(title,content) {
       host: templates[targetTemplate].hostname,
       path: templates[targetTemplate].path(match)
     }
-    suggestion.notes='WELP ' + title
+    targetSuggestion.notes='WELP ' + title
       +'\nCapture: ' + match[0]
 
     var parend = title.match(/^(.*) \((.*)\)$/)
@@ -136,7 +142,7 @@ function searchElContent(title,content) {
     suggest(wpSuggestion)
     suggest(targetSuggestion)
   } else {
-    console.log('WELP:NOTT '+page.title)
+    console.log('WELP:TNIEL '+title)
   }
 }
 
@@ -147,14 +153,14 @@ function queryPage(page) {
     prop: 'sections',
     page: page.title,
     format: 'json'
-  }, function(pbody) {
+  }, function(code, pbody) {
     //search backwards through the sections to find the 'External links'
     //(backwards because it's usually the last section)
     var i = pbody.parse.sections.length - 1;
     while(i >= 0 &&
       //Techncally the case should always be "External links",
       //but why be sensitive?
-      pbody.parse.sections[i].line.lower() != "external links") --i;
+      pbody.parse.sections[i].line.toLowerCase() != "external links") --i;
 
     //If the search found something within the bounds of the list
     if(i >= 0) {
@@ -169,12 +175,15 @@ function queryPage(page) {
         rvsection: pbody.parse.sections[i].index,
         titles: page.title,
         format: 'json'
-      }, function(rbody) {
+      }, function(code,rbody) {
         searchElContent(page.title,
           //The object with the revisions is identified by the pageid.
           //Since it's going to be the only key in the query's pages,
           //I'm going with this.
-          rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0])
+
+          //Also, for the record, this is the dumbest dereference chain ever.
+
+          rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0]['*'])
       })
 
     //If we ran through all the sections and went past the beginning
@@ -187,24 +196,27 @@ function queryPage(page) {
 function timer_cb() {
   //If we've run through all the pages we have and there are still more
   if((curpage == pages.length && eicontinue) || pages.length == 0) {
-
+    if(popWaiting) {
+      process.stdout.write('.')
+    } else {
     //Query the API for the next group of pages
-    console.log('Querying API for next group of pages ('+eicontinue+')...')
+      process.stdout.write('Querying API for next group of pages ('+eicontinue+')...')
 
-    var apiparams = {
-      action: 'query',
-      list: 'embeddedin',
-      eititle: targetTemplate,
-      // last I checked, the largest limit Wikipedia
-      // is comfortable with is 500, which is plenty
-      eilimit: 500,
-      format: 'json'
-    }
+      var apiparams = {
+        action: 'query',
+        list: 'embeddedin',
+        eititle: 'Template:'+targetTemplate,
+        // last I checked, the largest limit Wikipedia
+        // is comfortable with is 500, which is plenty
+        eilimit: 500,
+        format: 'json'
+      }
 
-    if(eicontinue) apiparams.eicontinue = eicontinue
+      if(eicontinue) apiparams.eicontinue = eicontinue
 
-    wpApiQuery(apiparams, populatePagesArray);
-
+      popWaiting = true;
+      wpApiQuery(apiparams, populatePagesArray);
+  }
   //Otherwise, if we're still parsing the current batch
   //(not done or waiting for the next batch of pages)
   } else if(curpage < pages.length) {
