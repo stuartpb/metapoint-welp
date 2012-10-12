@@ -1,16 +1,19 @@
-var mongodb = require('mongodb')
-
 var useragent = 'Metapoint-WikipediaExternalLinkParser/0.1 (http://github.com/stuartpb/metapoint-welp; stuart@testtrack4.com)'
+var wikihost = 'en.wikipedia.org'
+var mphost = 'metapoint.io' //'localhost'
+
+var http = require('http')
+var url = require('url')
 
 function imdbTemplate(type,abbr) {
   return {
-    regex: RegExpObject.compile(
+    regex: RegExp(
       '{{IMDb[ _]'+type+'\\|(\\d*)\\|?(.*)}}',
       //the case insensitivity is to handle the majority of redirect cases
       'i'),
     hostname: 'www.imdb.com',
     path: function(match) {
-      return '/'+type+'/'abbr+'0000000'.slice(match[1].length,7)+idnum
+      return '/'+type+'/'+abbr+'0000000'.slice(match[1].length,7)+idnum
     }
   }
 }
@@ -20,23 +23,55 @@ var templates = {
   'IMDb_name': imdbTemplate('name','nm')
 }
 
-var targetTemplate = process.argv[1]
+var targetTemplate = process.argv[2]
 
 var pages = []
 var eicontinue
 var curpage = 0
 var timerId
 
+/* Enter a suggestion through the Metapoint interface.
+
+  I was originally thinking I'd bypass the HTTP API for this
+  and just suggest straight to the database backend, but then
+  I decided that doesn't get me anything but a package dependency,
+  a connection object to architect around, and an annoying requirement
+  that this has to run on the server.
+
+  This way I can run the script from my own clients as well as
+  the server, with what's built into Node, and the loss is, what-
+  100ms of IO throughput at 4 requests a second? */
+function suggest(apiparams, cb) {
+  var req = http.request({
+    host: mphost,
+    path: url.format({
+      pathname: '/api/v0/suggest',
+      query: apiparams
+    }),
+    headers: {
+      'User-Agent': useragent
+    },
+    method: 'POST'
+  },function(res){
+  })
+
+  req.on('error', function(e) {
+    console.log('problem with request: ' + e.message);
+  })
+
+  req.end()
+}
+
 function wpApiQuery(params, cb) {
   var req = http.request({
-    host: 'en.wikipedia.org',
+    host: wikihost,
     path: url.format({
       pathname: '/w/api.php',
       query: apiparams
-    },
+    }),
     headers: {
       'User-Agent': useragent
-    })
+    }
   },function(res){
     var bodylist = []
     res.on('data', function (chunk) {
@@ -64,10 +99,49 @@ function populatePagesArray(code, body) {
 //Searches the content of an "External links" section
 //for the template and makes a suggestion if found.
 function searchElContent(title,content) {
+  var match = content.match(templates[targetTemplate].regex)
+  if(match) {
+    var wpSuggestion = {
+      host: wikihost,
+      path: '/wiki/' + encodeURIComponent(title.replace(' ','_'))
+    }
+    var targetSuggestion = {
+      host: templates[targetTemplate].hostname,
+      path: templates[targetTemplate].path(match)
+    }
+    suggestion.notes='WELP ' + title
+      +'\nCapture: ' + match[0]
 
+    var parend = title.match(/^(.*) \((.*)\)$/)
+    if(parend){
+      var scope = parend[2]
+      //Easy way to knock out MANY of these scope parentheticals
+      if(scope.match(/film$/)){
+        wpSuggestion.scope = scope
+        wpSuggestion.topic = parend[1]
+        targetSuggestion.scope = scope
+        targetSuggestion.topic = parend[1]
+      } else {
+        //I'll probably delete the paren in the title in revision,
+        //but it might be part of the name in which case I'll delete the scope
+        wpSuggestion.scope = scope
+        wpSuggestion.topic = title
+        targetSuggestion.scope = scope
+        targetSuggestion.topic = title
+      }
+    } else {
+      wpSuggestion.topic = title
+      targetSuggestion.topic = title
+    }
+    suggest(wpSuggestion)
+    suggest(targetSuggestion)
+  } else {
+    console.log('WELP:NOTT '+page.title)
+  }
 }
 
 function queryPage(page) {
+  console.log('Querying '+page.title+'...')
   wpApiQuery({
     action: 'parse',
     prop: 'sections',
@@ -93,7 +167,7 @@ function queryPage(page) {
         //in reality, this is probably going to be i+1, but let's
         //use what we're given
         rvsection: pbody.parse.sections[i].index,
-        titles = page.title,
+        titles: page.title,
         format: 'json'
       }, function(rbody) {
         searchElContent(page.title,
@@ -107,15 +181,15 @@ function queryPage(page) {
     } else {
       console.log('WELP:NOEL '+page.title)
     }
-  }
+  })
 }
 
 function timer_cb() {
   //If we've run through all the pages we have and there are still more
-  if((curpage == pages.length && continuetoken) || pages.length = 0) {
+  if((curpage == pages.length && eicontinue) || pages.length == 0) {
 
     //Query the API for the next group of pages
-    console.log('Querying API for next group of pages...')
+    console.log('Querying API for next group of pages ('+eicontinue+')...')
 
     var apiparams = {
       action: 'query',
@@ -147,11 +221,12 @@ function timer_cb() {
 
 // Run
 if(!targetTemplate){
-  error('This script must be run with a target template as a parameter.')
+  console.error('This script must be run with a target template as a parameter.')
 } else if (!(targetTemplate in templates)) {
-  error('Target template "'+target+'" not found')
+  console.error('Target template "'+targetTemplate+'" not found')
 } else {
-  console.log('Getting pages for "'+targetTemplate'"...')
+  console.log('Getting pages for "'+targetTemplate+'"...')
+  if(process.argv[3]){}
   timerId = setInterval(timer_cb,250)
 }
 
