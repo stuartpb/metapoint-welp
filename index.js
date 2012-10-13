@@ -93,13 +93,16 @@ function wpApiQuery(params, cb) {
 
 //Reset the pages data from an API response.
 function populatePagesArray(code, body) {
-  //i should probably check if the code is 200 but
-  pages = body.query.embeddedin
-  curpage = 0
-  //NOTE: I don't know if the last one has a query-continue
-  eicontinue = body['query-continue'].embeddedin.eicontinue
-  popWaiting = false
-  process.stdout.write('\n')
+  if (code == 200) {
+    pages = body.query.embeddedin
+    curpage = 0
+    //NOTE: I don't know if the last one has a query-continue
+    eicontinue = body['query-continue'].embeddedin.eicontinue
+    popWaiting = false
+    process.stdout.write('\n')
+  } else {
+    console.error('WELP:NOOK '+code+' 'body)
+  }
 }
 
 //Searches the content of an "External links" section
@@ -122,14 +125,15 @@ function searchElContent(title,content) {
     if(parend){
       var scope = parend[2]
       //Easy way to knock out MANY of these scope parentheticals
-      if(scope.match(/film$/)){
+      if(scope.match(/film$/) || scope.match(/TV series$/)){
         wpSuggestion.scope = scope
         wpSuggestion.topic = parend[1]
         targetSuggestion.scope = scope
         targetSuggestion.topic = parend[1]
       } else {
-        //I'll probably delete the paren in the title in revision,
-        //but it might be part of the name in which case I'll delete the scope
+        //I'll probably delete the paren in the title in revision (ie. if it's "musical"),
+        //but it might be part of the name (ie. some title that ends with parentheses)
+        //in which case I'll delete the scope
         wpSuggestion.scope = scope
         wpSuggestion.topic = title
         targetSuggestion.scope = scope
@@ -176,14 +180,18 @@ function queryPage(page) {
         titles: page.title,
         format: 'json'
       }, function(code,rbody) {
-        searchElContent(page.title,
-          //The object with the revisions is identified by the pageid.
-          //Since it's going to be the only key in the query's pages,
-          //I'm going with this.
+        if (code == 200) {
+          searchElContent(page.title,
+            //The object with the revisions is identified by the pageid.
+            //Since it's going to be the only key in the query's pages,
+            //I'm going with this.
 
-          //Also, for the record, this is the dumbest dereference chain ever.
+            //Also, for the record, this is the dumbest dereference chain ever.
 
-          rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0]['*'])
+            rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0]['*'])
+        } else {
+          console.error('WELP:NOOK '+code+' 'body)
+        }
       })
 
     //If we ran through all the sections and went past the beginning
@@ -238,7 +246,7 @@ if(!targetTemplate){
   console.error('Target template "'+targetTemplate+'" not found')
 } else {
   console.log('Getting pages for "'+targetTemplate+'"...')
-  if(process.argv[3]){}
-  timerId = setInterval(timer_cb,250)
+  if(process.argv[3]){eicontinue = process.argv[3]}
+  timerId = setInterval(timer_cb,500)
 }
 
