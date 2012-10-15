@@ -15,7 +15,12 @@ function imdbTemplate(type,abbr) {
     path: function(match) {
       var id = match[1]
       if (id == '') {
-        id = match[2].match(/id\s*=\s*(\d*)/)[1]
+        id = match[2].match(/id\s*=\s*(\d*)/)
+        if(id){
+          id = id[1]
+        } else {
+          return null
+        }
       }
       return '/'+type+'/'+abbr+'0000000'.slice(id.length,7)+id
     }
