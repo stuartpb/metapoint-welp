@@ -16,7 +16,7 @@ function imdbTemplate(type,abbr) {
       var id = match[1]
       if (id == '') {
         id = match[2].match(/id\s*=\s*(\d*)/)
-        if(id){
+        if (id) {
           id = id[1]
         } else {
           return null
@@ -160,7 +160,8 @@ function searchElContent(title,content) {
       suggest(wpSuggestion)
       suggest(targetSuggestion)
     } else {
-    console.log('! WELP:BADPATH '+title)
+      console.log('! WELP:BADPATH '+title)
+    }
   } else {
     console.log('! WELP:TNIEL '+title)
   }
