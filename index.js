@@ -8,7 +8,7 @@ var url = require('url')
 function imdbTemplate(type,abbr) {
   return {
     regex: RegExp(
-      '{{IMDb[ _]'+type+'\\|(\\d*)\\|?(.*)}}',
+      '{{\\s*IMDb[ _]'+type+'\\s*\\|(\\d*)\\|?(.*)}}',
       //the case insensitivity is to handle the majority of redirect cases
       'i'),
     hostname: 'www.imdb.com',
@@ -58,7 +58,7 @@ function suggest(params, cb) {
   })
 
   req.on('error', function(e) {
-    console.log('problem with request: ' + e.message);
+    console.error('! problem with request: ' + e.message);
   })
 
   req.end()
@@ -85,7 +85,7 @@ function wpApiQuery(params, cb) {
   })
 
   req.on('error', function(e) {
-    console.log('problem with request: ' + e.message);
+    console.error('! problem with request: ' + e.message);
   })
 
   req.end()
@@ -96,12 +96,15 @@ function populatePagesArray(code, body) {
   if (code == 200) {
     pages = body.query.embeddedin
     curpage = 0
-    //NOTE: I don't know if the last one has a query-continue
-    eicontinue = body['query-continue'].embeddedin.eicontinue
+    if(body['query-continue']) {
+      eicontinue = body['query-continue'].embeddedin.eicontinue
+    } else {
+      eicontinue = undefined
+    }
     popWaiting = false
     process.stdout.write('\n')
   } else {
-    console.error('WELP:NOOK '+code+' 'body)
+    console.error('! WELP:NOOK '+code+' '+body)
   }
 }
 
@@ -146,59 +149,68 @@ function searchElContent(title,content) {
     suggest(wpSuggestion)
     suggest(targetSuggestion)
   } else {
-    console.log('WELP:TNIEL '+title)
+    console.log('! WELP:TNIEL '+title)
+  }
+}
+
+function findSections(code, pbody) {
+  var title = pbody.parse.title
+
+  //search backwards through the sections to find the 'External links'
+  //(backwards because it's usually the last section)
+  var i = pbody.parse.sections.length - 1;
+  while(i >= 0 &&
+    //Techncally the case should always be "External links",
+    //but why be sensitive?
+    pbody.parse.sections[i].line.toLowerCase() != "external links") --i;
+
+  //If the search found something within the bounds of the list
+  if(i >= 0) {
+    //Get the text of the "External links" section
+    //(yes yes, this query isn't on the timer. I'm okay with that.)
+    wpApiQuery({
+      action: 'query',
+      prop: 'revisions',
+      rvprop: 'content',
+      //in reality, this is probably going to be i+1, but let's
+      //use what we're given
+      rvsection: pbody.parse.sections[i].index,
+      titles: title,
+      format: 'json'
+    }, function(code,rbody) {
+      if (code == 200) {
+        searchElContent(title,
+          //The object with the revisions is identified by the pageid.
+          //Since it's going to be the only key in the query's pages,
+          //I'm going with this.
+
+          //Also, for the record, this is the dumbest dereference chain ever.
+
+          rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0]['*'])
+      } else {
+        console.error('! WELP:NOOK '+code+' '+body)
+      }
+    })
+
+  //If we ran through all the sections and went past the beginning
+  } else {
+    console.log('! WELP:NOEL '+title)
   }
 }
 
 function queryPage(page) {
-  console.log('Querying '+page.title+'...')
-  wpApiQuery({
-    action: 'parse',
-    prop: 'sections',
-    page: page.title,
-    format: 'json'
-  }, function(code, pbody) {
-    //search backwards through the sections to find the 'External links'
-    //(backwards because it's usually the last section)
-    var i = pbody.parse.sections.length - 1;
-    while(i >= 0 &&
-      //Techncally the case should always be "External links",
-      //but why be sensitive?
-      pbody.parse.sections[i].line.toLowerCase() != "external links") --i;
-
-    //If the search found something within the bounds of the list
-    if(i >= 0) {
-      //Get the text of the "External links" section
-      //(yes yes, this query isn't on the timer. I'm okay with that.)
-      wpApiQuery({
-        action: 'query',
-        prop: 'revisions',
-        rvprop: 'content',
-        //in reality, this is probably going to be i+1, but let's
-        //use what we're given
-        rvsection: pbody.parse.sections[i].index,
-        titles: page.title,
-        format: 'json'
-      }, function(code,rbody) {
-        if (code == 200) {
-          searchElContent(page.title,
-            //The object with the revisions is identified by the pageid.
-            //Since it's going to be the only key in the query's pages,
-            //I'm going with this.
-
-            //Also, for the record, this is the dumbest dereference chain ever.
-
-            rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0]['*'])
-        } else {
-          console.error('WELP:NOOK '+code+' 'body)
-        }
-      })
-
-    //If we ran through all the sections and went past the beginning
-    } else {
-      console.log('WELP:NOEL '+page.title)
-    }
-  })
+  //Only query pages in the main namespace
+  if(page.ns == 0){
+    console.log(': '+page.title)
+    wpApiQuery({
+      action: 'parse',
+      prop: 'sections',
+      page: page.title,
+      format: 'json'
+    }, findSections)
+  } else {
+    console.log('^ '+page.title)
+  }
 }
 
 function timer_cb() {
@@ -208,7 +220,7 @@ function timer_cb() {
       process.stdout.write('.')
     } else {
     //Query the API for the next group of pages
-      process.stdout.write('Querying API for next group of pages ('+eicontinue+')...')
+      process.stdout.write('@ Querying API for next group of pages ('+eicontinue+')...')
 
       var apiparams = {
         action: 'query',
@@ -233,7 +245,7 @@ function timer_cb() {
   // (the previous condition falling through
   // indicates curpage == pages.length,
   // and the last query didn't have any more continuation tokens)
-  } else if(!continuetoken) {
+  } else if(!eicontinue) {
     // Stop the timer
     clearInterval(timerId)
   }
