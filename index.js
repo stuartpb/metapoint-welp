@@ -14,15 +14,17 @@ function imdbTemplate(type,abbr) {
     hostname: 'www.imdb.com',
     path: function(match) {
       var id = match[1]
-      if (id == '') {
+      if (!id) {
         id = match[2].match(/id\s*=\s*(\d*)/)
         if (id) {
           id = id[1]
-        } else {
-          return null
         }
       }
-      return '/'+type+'/'+abbr+'0000000'.slice(id.length,7)+id
+      if(id) {
+        return '/'+type+'/'+abbr+'0000000'.slice(id.length,7)+id
+      } else {
+        return null
+      }
     }
   }
 }
@@ -126,7 +128,7 @@ function searchElContent(title,content) {
     if(targetPath) {
       var wpSuggestion = {
         host: wikihost,
-        path: '/wiki/' + encodeURIComponent(title.replace(' ','_'))
+        path: '/wiki/' + encodeURIComponent(title.replace(/ /g,'_'))
       }
       var targetSuggestion = {
         host: templates[targetTemplate].hostname,
@@ -160,7 +162,7 @@ function searchElContent(title,content) {
       suggest(wpSuggestion)
       suggest(targetSuggestion)
     } else {
-      console.log('! WELP:BADPATH '+title)
+      console.log('! WELP:NOID '+title+' | '+match[0])
     }
   } else {
     console.log('! WELP:TNIEL '+title)
