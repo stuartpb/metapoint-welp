@@ -1,4 +1,5 @@
-var useragent = 'Metapoint-WikipediaExternalLinkParser/0.1 (http://github.com/stuartpb/metapoint-welp; stuart@testtrack4.com)'
+var useragent = 'Metapoint-WikipediaExternalLinkParser/0.1'
+  + ' (http://github.com/stuartpb/metapoint-welp; stuart@testtrack4.com)'
 var wikihost = 'en.wikipedia.org'
 var mphost = 'metapoint.io' //'localhost'
 
@@ -192,19 +193,14 @@ function findSections(code, pbody) {
       //use what we're given
       rvsection: pbody.parse.sections[i].index,
       titles: title,
-      format: 'json'
+      format: 'json',
+      indexpageids: true
     }, function(code,rbody) {
       if (code == 200) {
         searchElContent(title,
-          //The object with the revisions is identified by the pageid.
-          //Since it's going to be the only key in the query's pages,
-          //I'm going with this.
-
-          //Also, for the record, this is the dumbest dereference chain ever.
-
-          rbody.query.pages[Object.keys(rbody.query.pages)[0]].revisions[0]['*'])
+          rbody.query.pages[rbody.query.pageids[0]].revisions[0]['*'])
       } else {
-        console.error('! WELP:NOOK '+code+' '+body)
+        console.error('! WELP:NOOK '+code+' '+rbody)
       }
     })
 
