@@ -13,7 +13,7 @@ function imdbTemplate(type,abbr) {
       //the case insensitivity is to handle the majority of redirect cases
       'i'),
     hostname: 'www.imdb.com',
-    path: function(match) {
+    path: function(match,callback){callback(function() {
       var id = match[1]
       if (!id) {
         id = match[2].match(/id\s*=\s*(\d*)/)
@@ -26,7 +26,7 @@ function imdbTemplate(type,abbr) {
       } else {
         return null
       }
-    }
+    }())
   }
 }
 
@@ -125,46 +125,47 @@ function populatePagesArray(code, body) {
 function searchElContent(title,content) {
   var match = content.match(templates[targetTemplate].regex)
   if(match) {
-    var targetPath = templates[targetTemplate].path(match)
-    if(targetPath) {
-      var wpSuggestion = {
-        host: wikihost,
-        path: '/wiki/' + encodeURIComponent(title.replace(/ /g,'_'))
-      }
-      var targetSuggestion = {
-        host: templates[targetTemplate].hostname,
-        path: targetPath
-      }
-      targetSuggestion.notes='WELP ' + title
-        +'\nCapture: ' + match[0]
-
-      var parend = title.match(/^(.*) \((.*)\)$/)
-      if(parend){
-        var scope = parend[2]
-        //Easy way to knock out MANY of these scope parentheticals
-        if(scope.match(/film$/) || scope.match(/TV series$/)){
-          wpSuggestion.scope = scope
-          wpSuggestion.topic = parend[1]
-          targetSuggestion.scope = scope
-          targetSuggestion.topic = parend[1]
+    templates[targetTemplate].path(match, function(targetPath){
+      if(targetPath) {
+        var wpSuggestion = {
+          host: wikihost,
+          path: '/wiki/' + encodeURIComponent(title.replace(/ /g,'_'))
+        }
+        var targetSuggestion = {
+          host: templates[targetTemplate].hostname,
+          path: targetPath
+        }
+        targetSuggestion.notes='WELP ' + title
+          +'\nCapture: ' + match[0]
+  
+        var parend = title.match(/^(.*) \((.*)\)$/)
+        if(parend){
+          var scope = parend[2]
+          //Easy way to knock out MANY of these scope parentheticals
+          if(scope.match(/film$/) || scope.match(/TV series$/)){
+            wpSuggestion.scope = scope
+            wpSuggestion.topic = parend[1]
+            targetSuggestion.scope = scope
+            targetSuggestion.topic = parend[1]
+          } else {
+            //I'll probably delete the paren in the title in revision (ie. if it's "musical"),
+            //but it might be part of the name (ie. some title that ends with parentheses)
+            //in which case I'll delete the scope
+            wpSuggestion.scope = scope
+            wpSuggestion.topic = title
+            targetSuggestion.scope = scope
+            targetSuggestion.topic = title
+          }
         } else {
-          //I'll probably delete the paren in the title in revision (ie. if it's "musical"),
-          //but it might be part of the name (ie. some title that ends with parentheses)
-          //in which case I'll delete the scope
-          wpSuggestion.scope = scope
           wpSuggestion.topic = title
-          targetSuggestion.scope = scope
           targetSuggestion.topic = title
         }
+        suggest(wpSuggestion)
+        suggest(targetSuggestion)
       } else {
-        wpSuggestion.topic = title
-        targetSuggestion.topic = title
+        console.log('! WELP:NOID '+title+' | '+match[0])
       }
-      suggest(wpSuggestion)
-      suggest(targetSuggestion)
-    } else {
-      console.log('! WELP:NOID '+title+' | '+match[0])
-    }
+    })
   } else {
     console.log('! WELP:TNIEL '+title)
   }
