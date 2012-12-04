@@ -1,10 +1,10 @@
 var useragent = 'Metapoint-WikipediaExternalLinkParser/0.1'
-  + ' (http://github.com/stuartpb/metapoint-welp; stuart@testtrack4.com)'
-var wikihost = 'en.wikipedia.org'
-var mphost = 'metapoint.io' //'localhost'
+  + ' (http://github.com/stuartpb/metapoint-welp; stuart@testtrack4.com)';
+var wikihost = 'en.wikipedia.org';
+var mphost = 'metapoint.io'; //'localhost';
 
-var http = require('http')
-var url = require('url')
+var http = require('http');
+var url = require('url');
 
 function imdbTemplate(type,abbr) {
   return {
@@ -14,20 +14,20 @@ function imdbTemplate(type,abbr) {
       'i'),
     hostname: 'www.imdb.com',
     path: function(match,callback){callback(function() {
-      var id = match[1]
+      var id = match[1];
       if (!id) {
-        id = match[2].match(/id\s*=\s*(\d*)/)
+        id = match[2].match(/id\s*=\s*(\d*)/);
         if (id) {
-          id = id[1]
+          id = id[1];
         }
       }
       if(id) {
-        return '/'+type+'/'+abbr+'0000000'.slice(id.length,7)+id
+        return '/'+type+'/'+abbr+'0000000'.slice(id.length,7)+id;
       } else {
-        return null
+        return null;
       }
-    }())
-  }
+    }())}
+  };
 }
 
 var templates = {
@@ -37,60 +37,60 @@ var templates = {
     regex: /\{\{\s*Tv.com\s*\|(.*?)\}\}/,
     hostname: 'tv.com',
     path: function(match,callback){
-      var tContent = match[1]
-      var barArray = tContent.split('|')
-      var oldId, title
+      var tContent = match[1];
+      var barArray = tContent.split('|');
+      var oldId, title;
       for(var i = 0; i < barArray.length && !(oldId && title); ++i) {
-        var pair = barArray[i].split('=')
+        var pair = barArray[i].split('=');
         if (pair.length > 1){
           if (pair.length == 2) {
-            var key = pair[0].replace(/^\s+|\s+$/g, '')
+            var key = pair[0].replace(/^\s+|\s+$/g, '');
             //I think values actually don't get trimmed
             //but who's to say someone didn't mess it up
-            var value = pair[1].replace(/^\s+|\s+$/g, '')
+            var value = pair[1].replace(/^\s+|\s+$/g, '');
             if (key == 'title' || key == 'name'){
-              title = value
+              title = value;
             } else if (key == 'id') {
-              oldId = value
+              oldId = value;
             }
           } //if pair length is more than 2 there's some kind of
             //syntax error I don't feel like looking into right now
         } else if(i == 0) {
-          oldId = barArray[i]
+          oldId = barArray[i];
         } else if(i == 1) {
-          title = barArray[i]
+          title = barArray[i];
         }
       }
-      var oldPath = '/show/'+oldId+'/summary.html'
+      var oldPath = '/show/'+oldId+'/summary.html';
       var req = http.request({
         host: 'www.tv.com',
         path: oldPath
       },function(res){
         if(res.statusCode==301){
-          callback(res.headers.location.replace(/^http:\/\/www\.tv\.com/,''))
+          callback(res.headers.location.replace(/^http:\/\/www\.tv\.com/,''));
         } else {
           console.error('! TV.com returned status ' + res.statusCode
             + ' for ' + oldPath);
         }
-      })
+      });
       
       req.on('error', function(e) {
         console.error('! problem with request: ' + e.message);
-      })
+      });
     
-      req.end()
+      req.end();
     }
   }
-}
+};
 
-var targetTemplate = process.argv[2]
+var targetTemplate = process.argv[2];
 
-var pages = []
-var eicontinue
-var curpage = 0
-var timerId
+var pages = [];
+var eicontinue;
+var curpage = 0;
+var timerId;
 //Whether we're waiting for the response to a request.
-var popWaiting = false
+var popWaiting = false;
 
 /* Enter a suggestion through the Metapoint interface.
 
@@ -114,13 +114,13 @@ function suggest(params, cb) {
       'User-Agent': useragent
     },
     method: 'POST'
-  },function(res){})
+  },function(res){});
 
   req.on('error', function(e) {
     console.error('! problem with request: ' + e.message);
-  })
+  });
 
-  req.end()
+  req.end();
 }
 
 function wpApiQuery(params, cb) {
@@ -134,92 +134,92 @@ function wpApiQuery(params, cb) {
       'User-Agent': useragent
     }
   },function(res){
-    var bodylist = []
+    var bodylist = [];
     res.on('data', function (chunk) {
-      bodylist.push(chunk)
-    })
+      bodylist.push(chunk);
+    });
     res.on('end', function(){
-      cb(res.statusCode,JSON.parse(bodylist.join('')))
-    })
-  })
+      cb(res.statusCode,JSON.parse(bodylist.join('')));
+    });
+  });
 
   req.on('error', function(e) {
     console.error('! problem with request: ' + e.message);
-  })
+  });
 
-  req.end()
+  req.end();
 }
 
 //Reset the pages data from an API response.
 function populatePagesArray(code, body) {
   if (code == 200) {
-    pages = body.query.embeddedin
-    curpage = 0
+    pages = body.query.embeddedin;
+    curpage = 0;
     if(body['query-continue']) {
-      eicontinue = body['query-continue'].embeddedin.eicontinue
+      eicontinue = body['query-continue'].embeddedin.eicontinue;
     } else {
-      eicontinue = undefined
+      eicontinue = undefined;
     }
-    popWaiting = false
-    process.stdout.write('\n')
+    popWaiting = false;
+    process.stdout.write('\n');
   } else {
-    console.error('! WELP:NOOK '+code+' '+body)
+    console.error('! WELP:NOOK '+code+' '+body);
   }
 }
 
 //Searches the content of an "External links" section
 //for the template and makes a suggestion if found.
 function searchElContent(title,content) {
-  var match = content.match(templates[targetTemplate].regex)
+  var match = content.match(templates[targetTemplate].regex);
   if(match) {
     templates[targetTemplate].path(match, function(targetPath){
       if(targetPath) {
         var wpSuggestion = {
           host: wikihost,
           path: '/wiki/' + encodeURIComponent(title.replace(/ /g,'_'))
-        }
+        };
         var targetSuggestion = {
           host: templates[targetTemplate].hostname,
           path: targetPath
-        }
+        };
         targetSuggestion.notes='WELP ' + title
-          +'\nCapture: ' + match[0]
+          +'\nCapture: ' + match[0];
   
-        var parend = title.match(/^(.*) \((.*)\)$/)
+        var parend = title.match(/^(.*) \((.*)\)$/);
         if(parend){
-          var scope = parend[2]
+          var scope = parend[2];
           //Easy way to knock out MANY of these scope parentheticals
           if(scope.match(/film$/) || scope.match(/TV series$/)){
-            wpSuggestion.scope = scope
-            wpSuggestion.topic = parend[1]
-            targetSuggestion.scope = scope
-            targetSuggestion.topic = parend[1]
+            wpSuggestion.scope = scope;
+            wpSuggestion.topic = parend[1];
+            targetSuggestion.scope = scope;
+            targetSuggestion.topic = parend[1];
           } else {
             //I'll probably delete the paren in the title in revision (ie. if it's "musical"),
             //but it might be part of the name (ie. some title that ends with parentheses)
             //in which case I'll delete the scope
-            wpSuggestion.scope = scope
-            wpSuggestion.topic = title
-            targetSuggestion.scope = scope
-            targetSuggestion.topic = title
+            wpSuggestion.scope = scope;
+            wpSuggestion.topic = title;
+            targetSuggestion.scope = scope;
+            targetSuggestion.topic = title;
           }
         } else {
-          wpSuggestion.topic = title
-          targetSuggestion.topic = title
+          wpSuggestion.topic = title;
+          targetSuggestion.topic = title;
         }
-        suggest(wpSuggestion)
-        suggest(targetSuggestion)
+        suggest(wpSuggestion);
+        suggest(targetSuggestion);
       } else {
-        console.log('! WELP:NOID '+title+' | '+match[0])
+        console.log('! WELP:NOID '+title+' | '+match[0]);
       }
-    })
+    });
   } else {
-    console.log('! WELP:TNIEL '+title)
+    console.log('! WELP:TNIEL '+title);
   }
 }
 
 function findSections(code, pbody) {
-  var title = pbody.parse.title
+  var title = pbody.parse.title;
 
   //search backwards through the sections to find the 'External links'
   //(backwards because it's usually the last section)
@@ -246,30 +246,30 @@ function findSections(code, pbody) {
     }, function(code,rbody) {
       if (code == 200) {
         searchElContent(title,
-          rbody.query.pages[rbody.query.pageids[0]].revisions[0]['*'])
+          rbody.query.pages[rbody.query.pageids[0]].revisions[0]['*']);
       } else {
-        console.error('! WELP:NOOK '+code+' '+rbody)
+        console.error('! WELP:NOOK '+code+' '+rbody);
       }
-    })
+    });
 
   //If we ran through all the sections and went past the beginning
   } else {
-    console.log('! WELP:NOEL '+title)
+    console.log('! WELP:NOEL '+title);
   }
 }
 
 function queryPage(page) {
   //Only query pages in the main namespace
   if(page.ns == 0){
-    console.log(': '+page.title)
+    console.log(': '+page.title);
     wpApiQuery({
       action: 'parse',
       prop: 'sections',
       page: page.title,
       format: 'json'
-    }, findSections)
+    }, findSections);
   } else {
-    console.log('^ '+page.title)
+    console.log('^ '+page.title);
   }
 }
 
@@ -277,10 +277,10 @@ function timer_cb() {
   //If we've run through all the pages we have and there are still more
   if((curpage == pages.length && eicontinue) || pages.length == 0) {
     if(popWaiting) {
-      process.stdout.write('.')
+      process.stdout.write('.');
     } else {
     //Query the API for the next group of pages
-      process.stdout.write('@ Querying API for next group of pages ('+eicontinue+')...')
+      process.stdout.write('@ Querying API for next group of pages ('+eicontinue+')...');
 
       var apiparams = {
         action: 'query',
@@ -290,9 +290,9 @@ function timer_cb() {
         // is comfortable with is 500, which is plenty
         eilimit: 500,
         format: 'json'
-      }
+      };
 
-      if(eicontinue) apiparams.eicontinue = eicontinue
+      if(eicontinue) apiparams.eicontinue = eicontinue;
 
       popWaiting = true;
       wpApiQuery(apiparams, populatePagesArray);
@@ -307,18 +307,18 @@ function timer_cb() {
   // and the last query didn't have any more continuation tokens)
   } else if(!eicontinue) {
     // Stop the timer
-    clearInterval(timerId)
+    clearInterval(timerId);
   }
 }
 
 // Run
 if(!targetTemplate){
-  console.error('This script must be run with a target template as a parameter.')
+  console.error('This script must be run with a target template as a parameter.');
 } else if (!(targetTemplate in templates)) {
-  console.error('Target template "'+targetTemplate+'" not found')
+  console.error('Target template "'+targetTemplate+'" not found');
 } else {
-  console.log('Getting pages for "'+targetTemplate+'"...')
+  console.log('Getting pages for "'+targetTemplate+'"...');
   if(process.argv[3]){eicontinue = process.argv[3]}
-  timerId = setInterval(timer_cb,500)
+  timerId = setInterval(timer_cb,500);
 }
 
