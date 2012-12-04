@@ -32,7 +32,55 @@ function imdbTemplate(type,abbr) {
 
 var templates = {
   'IMDb_title': imdbTemplate('title','tt'),
-  'IMDb_name': imdbTemplate('name','nm')
+  'IMDb_name': imdbTemplate('name','nm'),
+  'Tv.com': {
+    regex: /\{\{\s*Tv.com\s*\|(.*?)\}\}/,
+    hostname: 'tv.com',
+    path: function(match,callback){
+      var tContent = match[1]
+      var barArray = tContent.split('|')
+      var oldId, title
+      for(var i = 0; i < barArray.length && !(oldId && title); ++i) {
+        var pair = barArray[i].split('=')
+        if (pair.length > 1){
+          if (pair.length == 2) {
+            var key = pair[0].replace(/^\s+|\s+$/g, '')
+            //I think values actually don't get trimmed
+            //but who's to say someone didn't mess it up
+            var value = pair[1].replace(/^\s+|\s+$/g, '')
+            if (key == 'title' || key == 'name'){
+              title = value
+            } else if (key == 'id') {
+              oldId = value
+            }
+          } //if pair length is more than 2 there's some kind of
+            //syntax error I don't feel like looking into right now
+        } else if(i == 0) {
+          oldId = barArray[i]
+        } else if(i == 1) {
+          title = barArray[i]
+        }
+      }
+      var oldPath = '/show/'+oldId+'/summary.html'
+      var req = http.request({
+        host: 'www.tv.com',
+        path: oldPath
+      },function(res){
+        if(res.statusCode==301){
+          callback(res.headers.location.replace(/^http:\/\/www\.tv\.com/,''))
+        } else {
+          console.error('! TV.com returned status ' + res.statusCode
+            + ' for ' + oldPath);
+        }
+      })
+      
+      req.on('error', function(e) {
+        console.error('! problem with request: ' + e.message);
+      })
+    
+      req.end()
+    }
+  }
 }
 
 var targetTemplate = process.argv[2]
@@ -66,8 +114,7 @@ function suggest(params, cb) {
       'User-Agent': useragent
     },
     method: 'POST'
-  },function(res){
-  })
+  },function(res){})
 
   req.on('error', function(e) {
     console.error('! problem with request: ' + e.message);
