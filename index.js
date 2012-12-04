@@ -69,6 +69,7 @@ var templates = {
         if(res.statusCode==301){
           callback(res.headers.location.replace(/^http:\/\/www\.tv\.com/,''));
         } else {
+          //TV.com helpfully returns a 302 to redirect to their 404 page
           console.error('! TV.com returned status ' + res.statusCode
             + ' for ' + oldPath);
         }
@@ -175,12 +176,11 @@ function searchElContent(title,content) {
     templates[targetTemplate].path(match, function(targetPath){
       if(targetPath) {
         var wpSuggestion = {
-          host: wikihost,
-          path: '/wiki/' + encodeURIComponent(title.replace(/ /g,'_'))
+          url: wikihost + '/wiki/' +
+            encodeURIComponent(title.replace(/ /g,'_'))
         };
         var targetSuggestion = {
-          host: templates[targetTemplate].hostname,
-          path: targetPath
+          url: templates[targetTemplate].hostname + targetPath
         };
         targetSuggestion.notes='WELP ' + title
           +'\nCapture: ' + match[0];
