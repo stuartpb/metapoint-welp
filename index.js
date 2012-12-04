@@ -34,7 +34,7 @@ var templates = {
   'IMDb_title': imdbTemplate('title','tt'),
   'IMDb_name': imdbTemplate('name','nm'),
   'Tv.com': {
-    regex: /\{\{\s*Tv.com\s*\|(.*?)\}\}/,
+    regex: /\{\{\s*Tv.com\s*\|(.*?)\}\}/i, //often written as "tv.com"
     hostname: 'tv.com',
     path: function(match,callback){
       var tContent = match[1];
@@ -321,4 +321,3 @@ if(!targetTemplate){
   if(process.argv[3]){eicontinue = process.argv[3]}
   timerId = setInterval(timer_cb,500);
 }
-
